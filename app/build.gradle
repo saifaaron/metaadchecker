@@ -1,0 +1,66 @@
+plugins {
+    id "com.android.application"
+}
+
+def host = project.property("TWA_HOST")
+def path = project.property("TWA_PATH")
+def launchUrl = "https://" + host + path
+
+// Signing key: from keystore.properties locally, or from environment variables in CI
+def ks = new Properties()
+def ksFile = rootProject.file("keystore.properties")
+if (ksFile.exists()) { ksFile.withInputStream { ks.load(it) } }
+def ksValue = { String key, String env -> System.getenv(env) ?: ks.getProperty(key) }
+
+android {
+    namespace "agency.suresocial.adchecker"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "agency.suresocial.adchecker"
+        minSdk 21
+        targetSdk 34
+        versionCode Integer.parseInt(project.property("VERSION_CODE"))
+        versionName project.property("VERSION_NAME")
+
+        manifestPlaceholders = [hostName: host, pathPrefix: path]
+
+        resValue "string", "app_name", project.property("APP_NAME")
+        resValue "string", "launch_url", launchUrl
+        resValue "string", "provider_authority", "agency.suresocial.adchecker.fileprovider"
+        // Tells Android which site this app belongs to (the site confirms it via /.well-known/assetlinks.json)
+        resValue "string", "asset_statements",
+            '[{ \\"relation\\": [\\"delegate_permission/common.handle_all_urls\\"],' +
+            ' \\"target\\": {\\"namespace\\": \\"web\\", \\"site\\": \\"https://' + host + '\\"}}]'
+    }
+
+    signingConfigs {
+        release {
+            def storePath = ksValue("storeFile", "KEYSTORE_FILE")
+            if (storePath) {
+                storeFile rootProject.file(storePath)
+                storePassword ksValue("storePassword", "KEYSTORE_PASSWORD")
+                keyAlias ksValue("keyAlias", "KEY_ALIAS")
+                keyPassword ksValue("keyPassword", "KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt")
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation "com.google.androidbrowserhelper:androidbrowserhelper:2.5.0"
+    implementation "androidx.appcompat:appcompat:1.7.0"
+}
